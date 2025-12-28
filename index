@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>모어 원 계산기 by Moon</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --point-x: #ef4444; --point-p: #10b981; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); width: 100%; max-width: 650px; }
+        h2 { color: #1e293b; margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; text-align: center;}
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        label { display: block; font-size: 14px; font-weight: 600; color: #64748b; margin-bottom: 5px; }
+        input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #1d4ed8; }
+        canvas { background: #fff; border: 1px solid #e2e8f0; margin-top: 20px; width: 100%; height: auto; border-radius: 8px; }
+        .results { margin-top: 20px; padding: 15px; background: #eff6ff; border-radius: 8px; font-size: 15px; line-height: 1.6; display: flex; justify-content: space-around;}
+        span.val { color: var(--primary); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>모어 원 계산기 by Moon</h2>
+    <div class="input-grid">
+        <div><label>σₓ (MPa)</label><input type="number" id="sigX" value="80"></div>
+        <div><label>σᵧ (MPa)</label><input type="number" id="sigY" value="20"></div>
+        <div><label>τₓᵧ (MPa)</label><input type="number" id="tauXY" value="40"></div>
+    </div>
+    <button onclick="drawMohr()">그래프 및 좌표 갱신</button>
+
+    <canvas id="mohrCanvas" width="600" height="600"></canvas>
+
+    <div class="results" id="output">
+        버튼을 누르면 상세 정보가 표시됩니다.
+    </div>
+</div>
+
+<script>
+    function drawMohr() {
+        const sx = parseFloat(document.getElementById('sigX').value);
+        const sy = parseFloat(document.getElementById('sigY').value);
+        const txy = parseFloat(document.getElementById('tauXY').value);
+
+        const canvas = document.getElementById('mohrCanvas');
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const padding = 80; 
+
+        // 1. 역학 계산
+        const sigma_avg = (sx + sy) / 2;
+        const R = Math.sqrt(Math.pow((sx - sy) / 2, 2) + Math.pow(txy, 2));
+        const s1 = sigma_avg + R;
+        const s2 = sigma_avg - R;
+
+        // 2. 스케일링
+        const maxAbs = Math.max(Math.abs(s1), Math.abs(s2), Math.abs(txy), R) || 1;
+        const scale = (w / 2 - padding) / maxAbs;
+
+        const toX = (val) => w/2 + (val * scale);
+        const toY = (val) => h/2 - (val * scale);
+
+        // 3. 그리기 초기화
+        ctx.clearRect(0, 0, w, h);
+
+        // 그리드 축
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h); ctx.stroke();
+
+        // 모어 원
+        ctx.beginPath();
+        ctx.arc(toX(sigma_avg), toY(0), R * scale, 0, Math.PI * 2);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.03)';
+        ctx.fill();
+
+        // 지름선
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.moveTo(toX(sx), toY(txy));
+        ctx.lineTo(toX(sy), toY(-txy));
+        ctx.strokeStyle = '#94a3b8';
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 좌표 및 라벨 그리기 함수
+        const drawLabel = (x, y, text, color, align = 'left', baseline = 'middle') => {
+            ctx.fillStyle = color;
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = align;
+            ctx.textBaseline = baseline;
+            ctx.fillText(text, toX(x) + (align === 'left' ? 8 : -8), toY(y));
+            
+            ctx.beginPath();
+            ctx.arc(toX(x), toY(y), 4, 0, Math.PI * 2);
+            ctx.fill();
+        };
+
+        // 4. 좌표 상시 표시
+        // 주응력 포인트 (Green)
+        drawLabel(s1, 0, `σ₁: ${s1.toFixed(1)}`, '#10b981', 'left');
+        drawLabel(s2, 0, `σ₂: ${s2.toFixed(1)}`, '#10b981', 'right');
+
+        // 현재 응력 포인트 (Red)
+        drawLabel(sx, txy, `X(${sx}, ${txy})`, '#ef4444', 'left');
+        drawLabel(sy, -txy, `Y(${sy}, ${-txy})`, '#ef4444', 'right');
+
+        // 중심점 (Black)
+        drawLabel(sigma_avg, 0, `C(${sigma_avg.toFixed(1)})`, '#1e293b', 'left', 'bottom');
+
+        // 축 라벨
+        ctx.fillStyle = '#64748b';
+        ctx.fillText('σ (Normal)', w - 60, h/2 + 15);
+        ctx.fillText('τ (Shear)', w/2 + 10, 20);
+
+        // 결과 텍스트 출력
+        document.getElementById('output').innerHTML = `
+            <div>σ₁: <span class="val">${s1.toFixed(2)}</span></div>
+            <div>σ₂: <span class="val">${s2.toFixed(2)}</span></div>
+            <div>τₘₐₓ: <span class="val">${R.toFixed(2)}</span></div>
+        `;
+    }
+
+    window.onload = drawMohr;
+</script>
+
+</body>
+</html>
